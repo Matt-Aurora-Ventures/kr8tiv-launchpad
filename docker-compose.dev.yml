@@ -1,0 +1,74 @@
+version: '3.8'
+
+# Development overrides
+# Run with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: builder
+    command: npm run dev --workspace=apps/api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://kr8tiv:kr8tiv_dev@postgres:5432/kr8tiv_launchpad
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages/shared/src:/app/packages/shared/src
+    ports:
+      - "3001:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: builder
+    command: npm run dev --workspace=apps/web
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    volumes:
+      - ./apps/web/app:/app/apps/web/app
+      - ./apps/web/components:/app/apps/web/components
+      - ./apps/web/lib:/app/apps/web/lib
+      - ./apps/web/hooks:/app/apps/web/hooks
+      - ./packages/shared/src:/app/packages/shared/src
+    ports:
+      - "3000:3000"
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: kr8tiv-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kr8tiv.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    profiles:
+      - tools
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: kr8tiv-redis-commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    profiles:
+      - tools

@@ -1,0 +1,43 @@
+{
+  "name": "kr8tiv-launchpad",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "api:dev": "npm run dev --workspace=apps/api",
+    "web:dev": "npm run dev --workspace=apps/web",
+    "anchor:build": "cd programs/staking && anchor build",
+    "anchor:test": "cd programs/staking && anchor test",
+    "anchor:deploy": "cd programs/staking && anchor deploy",
+    "loadtest:k6": "bash ./load-tests/run-k6.sh",
+    "loadtest:k6:tokens": "bash ./load-tests/run-k6.sh tokens",
+    "loadtest:k6:staking": "bash ./load-tests/run-k6.sh staking",
+    "loadtest:k6:stress": "bash ./load-tests/run-k6.sh stress",
+    "loadtest:k6:soak": "bash ./load-tests/run-k6.sh soak",
+    "loadtest:artillery": "bash ./load-tests/run-artillery.sh",
+    "loadtest:artillery:stress": "bash ./load-tests/run-artillery.sh stress"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/k6": "^0.52.0",
+    "artillery": "^2.0.0",
+    "artillery-plugin-expect": "^2.0.0",
+    "chai": "^6.2.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ts-mocha": "^11.1.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

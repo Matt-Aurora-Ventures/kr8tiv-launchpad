@@ -1,0 +1,272 @@
+// KR8TIV Launchpad Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Token launched through the platform
+model Token {
+  id                  String   @id @default(uuid())
+  tokenMint           String   @unique
+  name                String
+  symbol              String
+  description         String?
+  imageUrl            String?
+
+  // Creator info
+  creatorWallet       String
+  creator             Creator? @relation(fields: [creatorWallet], references: [wallet])
+
+  // Bags.fm integration
+  configKey           String?  @unique  // Bags config account
+  bagsPoolAddress     String?           // Bags bonding curve pool
+
+  // Token configuration
+  initialSupply       BigInt   @default(1000000000000000) // 1B with 6 decimals
+
+  // Fee configuration (percentages stored as basis points, e.g., 100 = 1%)
+  burnEnabled         Boolean  @default(false)
+  burnPercentage      Int      @default(0)
+  lpEnabled           Boolean  @default(false)
+  lpPercentage        Int      @default(0)
+  dividendsEnabled    Boolean  @default(false)
+  dividendsPercentage Int      @default(0)
+
+  // Custom allocations JSON: [{ wallet: string, percentage: number, vestingMonths?: number }]
+  customAllocations   Json?
+
+  // Platform fee tracking
+  platformFeeApplied  Int      @default(100) // basis points (1% default)
+  platformFeeDiscount Int      @default(0)   // discount from staking
+
+  // Stats
+  totalVolumeUsd      Float    @default(0)
+  totalVolumeSol      Float    @default(0)
+  holderCount         Int      @default(0)
+  currentPriceUsd     Float    @default(0)
+  currentPriceSol     Float    @default(0)
+  marketCapUsd        Float    @default(0)
+
+  // Automation state
+  totalFeesCollected  BigInt   @default(0)
+  totalBurned         BigInt   @default(0)
+  totalToLp           BigInt   @default(0)
+  totalDividendsPaid  BigInt   @default(0)
+  lastAutomationRun   DateTime?
+
+  // Metadata
+  status              TokenStatus @default(PENDING)
+  launchedAt          DateTime?
+  graduatedAt         DateTime?   // When it graduated from Bags bonding curve
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  // Relations
+  automationJobs      AutomationJob[]
+
+  @@index([creatorWallet])
+  @@index([status])
+  @@index([launchedAt])
+}
+
+enum TokenStatus {
+  PENDING     // Awaiting launch
+  LAUNCHING   // Launch in progress
+  ACTIVE      // Live on Bags bonding curve
+  GRADUATED   // Graduated to Raydium
+  FAILED      // Launch failed
+}
+
+// Automation job for fee processing
+model AutomationJob {
+  id              String          @id @default(uuid())
+  tokenId         String
+  token           Token           @relation(fields: [tokenId], references: [id])
+
+  jobType         AutomationJobType
+  status          JobStatus       @default(PENDING)
+
+  // Execution details
+  triggerType     TriggerType     @default(SCHEDULED)
+  scheduledFor    DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+
+  // Results
+  claimedLamports BigInt          @default(0)
+  burnedTokens    BigInt          @default(0)
+  lpTokensAdded   BigInt          @default(0)
+  dividendsPaid   BigInt          @default(0)
+
+  // Transaction signatures
+  claimTxSignature String?
+  burnTxSignature  String?
+  lpTxSignature    String?
+  dividendsTxSig   String?
+
+  // Error tracking
+  errorMessage    String?
+  retryCount      Int             @default(0)
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([tokenId])
+  @@index([status])
+  @@index([jobType])
+  @@index([scheduledFor])
+}
+
+enum AutomationJobType {
+  CLAIM_FEES      // Claim fees from Bags
+  BURN            // Buy and burn tokens
+  ADD_LP          // Add to liquidity pool
+  PAY_DIVIDENDS   // Distribute to holders
+  FULL_CYCLE      // All of the above
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TriggerType {
+  SCHEDULED   // Cron-triggered
+  MANUAL      // Admin-triggered
+  THRESHOLD   // Triggered by fee threshold
+}
+
+// Staker in the $KR8TIV staking pool
+model Staker {
+  id                  String   @id @default(uuid())
+  wallet              String   @unique
+
+  // Staking position
+  stakedAmount        BigInt   @default(0)
+  weightedStake       BigInt   @default(0)  // Amount * lock multiplier
+  lockEndTime         DateTime?
+  lockDuration        Int      @default(0)  // Days locked
+
+  // Tier status
+  tier                StakingTier @default(NONE)
+
+  // Rewards
+  totalRewardsClaimed BigInt   @default(0)
+  pendingRewards      BigInt   @default(0)
+  lastClaimTime       DateTime?
+
+  // On-chain reference
+  stakeAccountPda     String?  // PDA address on-chain
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([tier])
+  @@index([stakedAmount])
+}
+
+enum StakingTier {
+  NONE        // < 10,000 KR8TIV
+  BRONZE      // 10,000+ KR8TIV (10% discount)
+  SILVER      // 50,000+ KR8TIV (25% discount)
+  GOLD        // 100,000+ KR8TIV (50% discount)
+  DIAMOND     // 500,000+ KR8TIV (75% discount)
+}
+
+// Creator profile and staking benefits
+model Creator {
+  id               String   @id @default(uuid())
+  wallet           String   @unique
+
+  // Staking for fee discounts
+  kr8tivStaked     BigInt   @default(0)
+  discountTier     StakingTier @default(NONE)
+
+  // Stats
+  tokensLaunched   Int      @default(0)
+  totalVolumeUsd   Float    @default(0)
+  totalFeesGenerated Float  @default(0)
+
+  // Profile (optional)
+  displayName      String?
+  bio              String?
+  twitterHandle    String?
+  websiteUrl       String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  tokens           Token[]
+
+  @@index([discountTier])
+}
+
+// Platform statistics (singleton)
+model PlatformStats {
+  id                    String   @id @default("platform")
+
+  totalTokensLaunched   Int      @default(0)
+  totalVolumeUsd        Float    @default(0)
+  totalVolumeSol        Float    @default(0)
+  totalFeesCollectedSol Float    @default(0)
+  totalBurnedUsd        Float    @default(0)
+  totalStakedKr8tiv     BigInt   @default(0)
+
+  activeTokens          Int      @default(0)
+  graduatedTokens       Int      @default(0)
+  uniqueCreators        Int      @default(0)
+  uniqueStakers         Int      @default(0)
+
+  updatedAt             DateTime @updatedAt
+}
+
+// User notifications
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String   // wallet address
+  type        String   // 'stake_complete', 'token_launched', 'rewards_available', etc.
+  title       String
+  message     String
+  data        Json?    // Additional notification data
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+// Push notification subscriptions
+model PushSubscription {
+  id          String   @id @default(cuid())
+  userId      String   // wallet address
+  endpoint    String   @unique
+  keys        Json     // { p256dh, auth }
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Feature flags for gradual rollouts and A/B testing
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  enabled     Boolean  @default(false)
+  percentage  Int      @default(100)  // Rollout percentage (0-100)
+  rules       Json?    // Targeting rules (e.g., allowedWallets, environments)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+  @@index([enabled])
+}

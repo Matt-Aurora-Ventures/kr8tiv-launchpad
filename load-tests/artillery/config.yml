@@ -1,0 +1,221 @@
+# Artillery Load Test Configuration
+# KR8TIV Launchpad API
+
+config:
+  target: "http://localhost:3001"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load"
+    - duration: 60
+      arrivalRate: 100
+      name: "Peak load"
+    - duration: 30
+      arrivalRate: 10
+      name: "Cool down"
+
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+
+  # Timeouts
+  http:
+    timeout: 30
+    pool: 100
+
+  # Plugins
+  plugins:
+    expect: {}
+
+  # Variables
+  variables:
+    testWallets:
+      - "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK"
+      - "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm"
+      - "FwfrwnNVLGyS8ucVjWvyoRdpEVTdBqkCQHWLNK2pwKjc"
+      - "HWHvQhFmJB6gPtqJx3gjxHX1iDKLezLPEqK5EBzDYBGh"
+    testMints:
+      - "So11111111111111111111111111111111111111112"
+      - "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+
+  # Ensure at least 95% success rate
+  ensure:
+    p95: 500
+    maxErrorRate: 1
+
+scenarios:
+  # Scenario 1: Browse tokens (most common user flow)
+  - name: "Browse tokens"
+    weight: 40
+    flow:
+      # Health check
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+      # List all tokens
+      - get:
+          url: "/api/tokens"
+          expect:
+            - statusCode: 200
+            - contentType: json
+          capture:
+            - json: "$.data[0].mint"
+              as: "firstMint"
+
+      - think: 1
+
+      # View recent tokens
+      - get:
+          url: "/api/tokens/recent"
+          expect:
+            - statusCode: 200
+
+      - think: 0.5
+
+      # View top tokens
+      - get:
+          url: "/api/tokens/top"
+          expect:
+            - statusCode: 200
+
+      - think: 0.5
+
+      # View token details (if we captured a mint)
+      - get:
+          url: "/api/tokens/{{ firstMint }}"
+          ifTrue: "firstMint"
+          expect:
+            - statusCode:
+                - 200
+                - 404
+
+  # Scenario 2: Check staking status
+  - name: "Check staking"
+    weight: 25
+    flow:
+      # Pool info
+      - get:
+          url: "/api/staking/pool"
+          expect:
+            - statusCode: 200
+
+      - think: 0.5
+
+      # Tiers
+      - get:
+          url: "/api/staking/tiers"
+          expect:
+            - statusCode: 200
+
+      - think: 0.5
+
+      # Random wallet status
+      - get:
+          url: "/api/staking/status/{{ $randomString(44) }}"
+          expect:
+            - statusCode:
+                - 200
+                - 404
+
+      - think: 0.5
+
+      # Leaderboard
+      - get:
+          url: "/api/staking/leaderboard"
+          expect:
+            - statusCode: 200
+
+  # Scenario 3: View platform stats
+  - name: "View stats"
+    weight: 20
+    flow:
+      # Platform stats
+      - get:
+          url: "/api/stats/platform"
+          expect:
+            - statusCode: 200
+
+      - think: 1
+
+      # Trending
+      - get:
+          url: "/api/stats/trending"
+          expect:
+            - statusCode: 200
+
+      - think: 0.5
+
+      # New tokens
+      - get:
+          url: "/api/stats/new"
+          expect:
+            - statusCode: 200
+
+      - think: 0.5
+
+      # Automation stats
+      - get:
+          url: "/api/stats/automation"
+          expect:
+            - statusCode: 200
+
+  # Scenario 4: Deep token analysis
+  - name: "Analyze token"
+    weight: 15
+    flow:
+      # List tokens first
+      - get:
+          url: "/api/tokens"
+          capture:
+            - json: "$.data[0].mint"
+              as: "tokenMint"
+
+      - think: 0.5
+
+      # Get detailed info
+      - get:
+          url: "/api/tokens/{{ tokenMint }}"
+          ifTrue: "tokenMint"
+          expect:
+            - statusCode:
+                - 200
+                - 404
+
+      - think: 0.5
+
+      # Get stats
+      - get:
+          url: "/api/tokens/{{ tokenMint }}/stats"
+          ifTrue: "tokenMint"
+          expect:
+            - statusCode:
+                - 200
+                - 404
+
+      - think: 0.5
+
+      # Get holders
+      - get:
+          url: "/api/tokens/{{ tokenMint }}/holders"
+          ifTrue: "tokenMint"
+          expect:
+            - statusCode:
+                - 200
+                - 404
+
+      - think: 0.5
+
+      # Get chart data
+      - get:
+          url: "/api/tokens/{{ tokenMint }}/chart?interval=1h"
+          ifTrue: "tokenMint"
+          expect:
+            - statusCode:
+                - 200
+                - 404

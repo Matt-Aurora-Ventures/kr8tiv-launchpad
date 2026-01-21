@@ -1,0 +1,440 @@
+# Security Scanning Pipeline
+# Runs vulnerability, SAST, and secret detection scans
+
+name: Security
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  actions: write
+  issues: write
+  pull-requests: write
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================
+  # Dependency Vulnerability Scanning
+  # ============================================
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Run npm audit (JSON)
+        id: audit
+        run: |
+          npm audit --json > audit-results.json || true
+          cat audit-results.json
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-results
+          path: audit-results.json
+          retention-days: 30
+
+      - name: Check for critical vulnerabilities
+        run: |
+          CRITICAL=$(cat audit-results.json | jq '.metadata.vulnerabilities.critical // 0')
+          HIGH=$(cat audit-results.json | jq '.metadata.vulnerabilities.high // 0')
+
+          echo "Critical: $CRITICAL"
+          echo "High: $HIGH"
+
+          if [[ "$CRITICAL" -gt 0 ]]; then
+            echo "::warning::Found $CRITICAL critical vulnerabilities - review required"
+          fi
+
+  # ============================================
+  # Snyk Vulnerability Scanning
+  # ============================================
+  snyk-scan:
+    name: Snyk Security Scan
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check if Snyk is configured
+        id: check-snyk
+        run: |
+          if [[ -n "${{ secrets.SNYK_TOKEN }}" ]]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Snyk token not configured - skipping Snyk scan"
+          fi
+
+      - name: Setup Node.js
+        if: steps.check-snyk.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.check-snyk.outputs.configured == 'true'
+        run: npm ci
+
+      - name: Run Snyk to check for vulnerabilities
+        if: steps.check-snyk.outputs.configured == 'true'
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-results.sarif
+
+      - name: Upload Snyk results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: steps.check-snyk.outputs.configured == 'true' && always()
+        with:
+          sarif_file: snyk-results.sarif
+        continue-on-error: true
+
+      - name: Upload Snyk results
+        uses: actions/upload-artifact@v4
+        if: steps.check-snyk.outputs.configured == 'true' && always()
+        with:
+          name: snyk-results
+          path: snyk-results.sarif
+          retention-days: 30
+
+  # ============================================
+  # Cargo Audit (Rust Dependencies)
+  # ============================================
+  cargo-audit:
+    name: Cargo Audit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check Rust program exists
+        id: check-rust
+        run: |
+          if [[ -f "programs/staking/Cargo.toml" ]]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::No Rust program found - skipping cargo audit"
+          fi
+
+      - name: Install cargo-audit
+        if: steps.check-rust.outputs.configured == 'true'
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        if: steps.check-rust.outputs.configured == 'true'
+        run: |
+          cd programs/staking
+          if [[ ! -f "Cargo.lock" ]]; then
+            cargo generate-lockfile
+          fi
+          cargo audit --json > ../../cargo-audit-results.json || true
+          cat ../../cargo-audit-results.json
+        continue-on-error: true
+
+      - name: Upload cargo audit results
+        uses: actions/upload-artifact@v4
+        if: steps.check-rust.outputs.configured == 'true' && always()
+        with:
+          name: cargo-audit-results
+          path: cargo-audit-results.json
+          retention-days: 30
+
+  # ============================================
+  # SAST - CodeQL Analysis
+  # ============================================
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript-typescript']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ============================================
+  # SAST - Semgrep Analysis
+  # ============================================
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container:
+      image: semgrep/semgrep
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: semgrep scan --config=auto --json --output=semgrep-results.json || true
+
+      - name: Upload Semgrep results
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          retention-days: 30
+
+      - name: Check for high severity findings
+        run: |
+          HIGH_COUNT=$(cat semgrep-results.json | jq '[.results[] | select(.extra.severity == "ERROR")] | length')
+          echo "High severity findings: $HIGH_COUNT"
+
+          if [[ "$HIGH_COUNT" -gt 0 ]]; then
+            echo "::warning::Found $HIGH_COUNT high severity issues"
+            cat semgrep-results.json | jq '.results[] | select(.extra.severity == "ERROR") | {path: .path, line: .start.line, message: .extra.message}'
+          fi
+
+  # ============================================
+  # Secret Detection
+  # ============================================
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan
+        uses: trufflesecurity/trufflehog@main
+        continue-on-error: true
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --only-verified
+
+      - name: GitLeaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        continue-on-error: true
+
+  # ============================================
+  # License Compliance Check
+  # ============================================
+  license-check:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install license-checker
+        run: npm install -g license-checker
+
+      - name: Check licenses
+        run: |
+          license-checker --json --out licenses.json
+
+          # Check for problematic licenses
+          PROBLEMATIC=$(cat licenses.json | jq 'to_entries | map(select(.value.licenses | test("GPL|AGPL|LGPL|SSPL|BSL"))) | length')
+
+          echo "Found $PROBLEMATIC packages with potentially problematic licenses"
+
+          if [[ "$PROBLEMATIC" -gt 0 ]]; then
+            echo "::warning::Found $PROBLEMATIC packages with copyleft licenses"
+            cat licenses.json | jq 'to_entries | map(select(.value.licenses | test("GPL|AGPL|LGPL|SSPL|BSL"))) | from_entries'
+          fi
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+          retention-days: 30
+
+  # ============================================
+  # Container Security (if Dockerfile exists)
+  # ============================================
+  container-scan:
+    name: Container Security
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Dockerfile
+        id: check-dockerfile
+        run: |
+          if find . -name Dockerfile -print -quit | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "::notice::No Dockerfile found - skipping container scan"
+          fi
+
+      - name: Build Docker image
+        if: steps.check-dockerfile.outputs.found == 'true'
+        run: |
+          if [ -f "apps/api/Dockerfile" ]; then
+            docker build -t kr8tiv-api:scan apps/api/
+          fi
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        if: steps.check-dockerfile.outputs.found == 'true'
+        with:
+          image-ref: 'kr8tiv-api:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: steps.check-dockerfile.outputs.found == 'true' && always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+  # ============================================
+  # Security Report Summary
+  # ============================================
+  security-report:
+    name: Security Report
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, codeql, semgrep, secret-scan, license-check]
+    if: always()
+    continue-on-error: true
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-reports/
+        continue-on-error: true
+
+      - name: Generate Security Summary
+        run: |
+          echo "# Security Scan Summary" > security-summary.md
+          echo "" >> security-summary.md
+          echo "**Repository:** ${{ github.repository }}" >> security-summary.md
+          echo "**Branch:** ${{ github.ref_name }}" >> security-summary.md
+          echo "**Commit:** ${{ github.sha }}" >> security-summary.md
+          echo "**Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> security-summary.md
+          echo "" >> security-summary.md
+          echo "## Scan Results" >> security-summary.md
+          echo "" >> security-summary.md
+          echo "| Scan | Status |" >> security-summary.md
+          echo "|------|--------|" >> security-summary.md
+          echo "| Dependency Audit | ${{ needs.dependency-audit.result }} |" >> security-summary.md
+          echo "| CodeQL | ${{ needs.codeql.result }} |" >> security-summary.md
+          echo "| Semgrep | ${{ needs.semgrep.result }} |" >> security-summary.md
+          echo "| Secret Detection | ${{ needs.secret-scan.result }} |" >> security-summary.md
+          echo "| License Check | ${{ needs.license-check.result }} |" >> security-summary.md
+
+          cat security-summary.md
+
+      - name: Upload Security Summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: security-summary.md
+          retention-days: 90
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const summary = `## Security Scan Results
+
+            | Scan | Status |
+            |------|--------|
+            | Dependency Audit | ${{ needs.dependency-audit.result }} |
+            | CodeQL | ${{ needs.codeql.result }} |
+            | Semgrep | ${{ needs.semgrep.result }} |
+            | Secret Detection | ${{ needs.secret-scan.result }} |
+            | License Check | ${{ needs.license-check.result }} |
+
+            [View full security report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: summary
+            });
+
+      - name: Report security status
+        run: |
+          if [[ "${{ needs.dependency-audit.result }}" == "failure" ]] || \
+             [[ "${{ needs.secret-scan.result }}" == "failure" ]]; then
+            echo "::warning::Security issues detected - review scan results"
+          else
+            echo "Security checks passed"
+          fi

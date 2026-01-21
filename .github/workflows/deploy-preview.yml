@@ -1,0 +1,362 @@
+# Preview Deployment Pipeline
+# Deploys preview environments for PRs
+
+name: Deploy Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, develop]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  # ============================================
+  # Deploy Web Preview to Vercel
+  # ============================================
+  deploy-web-preview:
+    name: Deploy Web Preview
+    runs-on: ubuntu-latest
+    outputs:
+      preview-url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Vercel configuration
+        id: check-vercel
+        run: |
+          if [[ -n "${{ secrets.VERCEL_TOKEN }}" ]] && [[ -n "${{ secrets.VERCEL_ORG_ID }}" ]] && [[ -n "${{ secrets.VERCEL_PROJECT_ID }}" ]]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Vercel secrets not configured - skipping preview deploy"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Vercel CLI
+        if: steps.check-vercel.outputs.configured == 'true'
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel Environment
+        if: steps.check-vercel.outputs.configured == 'true'
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project
+        if: steps.check-vercel.outputs.configured == 'true'
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.PREVIEW_API_URL }}
+          NEXT_PUBLIC_SOLANA_RPC_URL: ${{ secrets.DEVNET_RPC_URL }}
+          NEXT_PUBLIC_KR8TIV_MINT: ${{ secrets.DEVNET_KR8TIV_MINT }}
+          NEXT_PUBLIC_STAKING_PROGRAM_ID: ${{ secrets.DEVNET_STAKING_PROGRAM_ID }}
+
+      - name: Deploy to Vercel Preview
+        id: deploy
+        if: steps.check-vercel.outputs.configured == 'true'
+        run: |
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Preview URL: $URL"
+
+      - name: Comment Preview URL on PR
+        if: steps.check-vercel.outputs.configured == 'true' && steps.deploy.outputs.url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.url }}';
+            const body = `## Preview Deployment
+
+            | App | URL |
+            |-----|-----|
+            | Web | ${url} |
+
+            Preview deployed successfully from commit \`${{ github.sha }}\``;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('## Preview Deployment')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+  # ============================================
+  # Deploy API Preview (Optional - Railway/Render)
+  # ============================================
+  deploy-api-preview:
+    name: Deploy API Preview
+    runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_API_PREVIEW == 'true' }}
+    outputs:
+      api-url: ${{ steps.deploy.outputs.url }}
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: kr8tiv_preview
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Railway configuration
+        id: check-railway
+        run: |
+          if [[ -n "${{ secrets.RAILWAY_TOKEN }}" ]] && [[ -n "${{ secrets.RAILWAY_PROJECT_ID }}" ]]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Railway secrets not configured - skipping API preview deploy"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate --workspace=apps/api
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/kr8tiv_preview
+
+      - name: Build API
+        run: npm run build --workspace=apps/api
+
+      # Railway deployment (if using Railway)
+      - name: Deploy to Railway Preview
+        if: steps.check-railway.outputs.configured == 'true'
+        id: deploy
+        run: |
+          npm install -g @railway/cli
+          railway link --project ${{ secrets.RAILWAY_PROJECT_ID }}
+          URL=$(railway up --environment preview-${{ github.event.pull_request.number }} --json | jq -r '.url')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+  # ============================================
+  # E2E Tests Against Preview
+  # ============================================
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [deploy-web-preview]
+    if: needs.deploy-web-preview.outputs.preview-url != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for deployment to be ready
+        run: |
+          echo "Waiting for preview deployment to be ready..."
+          sleep 30
+          curl -sSf --retry 10 --retry-delay 5 "${{ needs.deploy-web-preview.outputs.preview-url }}" || exit 1
+
+      - name: Run E2E Tests
+        run: npx playwright test
+        env:
+          BASE_URL: ${{ needs.deploy-web-preview.outputs.preview-url }}
+          CI: true
+        continue-on-error: true
+
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ github.event.pull_request.number }}
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Comment E2E Results on PR
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const { readFileSync, existsSync } = require('fs');
+            let summary = 'E2E tests completed.';
+
+            if (existsSync('playwright-report/index.html')) {
+              summary = 'E2E tests completed. See artifacts for full report.';
+            }
+
+            const body = `### E2E Test Results
+
+            ${summary}
+
+            - Preview URL: ${{ needs.deploy-web-preview.outputs.preview-url }}
+            - Run: [View workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            // Append to existing preview comment or create new
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user.type === 'Bot' && c.body.includes('### E2E Test Results')
+            );
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
+
+  # ============================================
+  # Lighthouse Performance Check
+  # ============================================
+  lighthouse:
+    name: Lighthouse Audit
+    runs-on: ubuntu-latest
+    needs: [deploy-web-preview]
+    if: needs.deploy-web-preview.outputs.preview-url != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Wait for deployment
+        run: sleep 30
+
+      - name: Run Lighthouse
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            ${{ needs.deploy-web-preview.outputs.preview-url }}
+          configPath: './.lighthouserc.json'
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+        continue-on-error: true
+
+      - name: Format Lighthouse results
+        id: lighthouse
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const results = JSON.parse(fs.readFileSync('.lighthouseci/lhr-*.json', 'utf8'));
+
+            const scores = {
+              performance: Math.round(results.categories.performance.score * 100),
+              accessibility: Math.round(results.categories.accessibility.score * 100),
+              bestPractices: Math.round(results.categories['best-practices'].score * 100),
+              seo: Math.round(results.categories.seo.score * 100),
+            };
+
+            const body = `### Lighthouse Scores
+
+            | Category | Score |
+            |----------|-------|
+            | Performance | ${scores.performance} |
+            | Accessibility | ${scores.accessibility} |
+            | Best Practices | ${scores.bestPractices} |
+            | SEO | ${scores.seo} |`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+        continue-on-error: true
+
+  # ============================================
+  # Cleanup Preview on PR Close
+  # ============================================
+  cleanup-preview:
+    name: Cleanup Preview
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Railway configuration
+        id: check-railway
+        run: |
+          if [[ -n "${{ secrets.RAILWAY_TOKEN }}" ]]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Railway token not configured - skipping cleanup"
+          fi
+
+      - name: Delete Vercel Preview
+        run: |
+          # Vercel automatically cleans up preview deployments
+          echo "Preview deployment will be automatically cleaned up by Vercel"
+
+      - name: Delete Railway Preview Environment
+        if: vars.DEPLOY_API_PREVIEW == 'true' && steps.check-railway.outputs.configured == 'true'
+        run: |
+          npm install -g @railway/cli
+          railway environment delete preview-${{ github.event.pull_request.number }} --yes || true
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}

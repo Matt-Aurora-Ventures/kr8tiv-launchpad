@@ -1,0 +1,74 @@
+# Artillery Stress Test Configuration
+# KR8TIV Launchpad API
+#
+# This configuration pushes the API harder than the standard load test
+# to identify breaking points and performance degradation.
+
+config:
+  target: "http://localhost:3001"
+  phases:
+    - duration: 60
+      arrivalRate: 50
+      name: "Initial load"
+    - duration: 120
+      arrivalRate: 100
+      name: "Ramp to 100/s"
+    - duration: 120
+      arrivalRate: 200
+      name: "Ramp to 200/s"
+    - duration: 60
+      arrivalRate: 300
+      name: "Peak load 300/s"
+    - duration: 60
+      arrivalRate: 50
+      name: "Recovery"
+
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+  http:
+    timeout: 10
+    pool: 200
+
+  plugins:
+    expect: {}
+
+  # Relaxed thresholds for stress test
+  ensure:
+    p95: 2000
+    maxErrorRate: 10
+
+scenarios:
+  # High-frequency endpoint hitting
+  - name: "Rapid token queries"
+    weight: 50
+    flow:
+      - loop:
+        - get:
+            url: "/api/tokens"
+        - get:
+            url: "/api/tokens/recent"
+        - get:
+            url: "/api/tokens/top"
+        count: 3
+
+  - name: "Stats hammering"
+    weight: 30
+    flow:
+      - loop:
+        - get:
+            url: "/api/stats/platform"
+        - get:
+            url: "/api/stats/trending"
+        count: 5
+
+  - name: "Staking queries"
+    weight: 20
+    flow:
+      - loop:
+        - get:
+            url: "/api/staking/pool"
+        - get:
+            url: "/api/staking/leaderboard"
+        count: 3

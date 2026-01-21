@@ -1,0 +1,212 @@
+name: Load Tests
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Test scenario to run'
+        required: true
+        default: 'tokens'
+        type: choice
+        options:
+          - tokens
+          - staking
+          - launch
+          - stats
+          - all
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+  # Weekly schedule - Sunday at 4 AM UTC
+  schedule:
+    - cron: '0 4 * * 0'
+
+env:
+  K6_VERSION: '0.47.0'
+
+jobs:
+  # Smoke test - quick sanity check
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup K6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: ${{ env.K6_VERSION }}
+
+      - name: Run smoke test
+        run: |
+          k6 run \
+            --env API_URL=${{ secrets.STAGING_API_URL || 'http://localhost:3001' }} \
+            --vus 5 \
+            --duration 30s \
+            load-tests/k6/scenarios/tokens.js
+        continue-on-error: true
+
+  # Main K6 load tests
+  k6-load-test:
+    name: K6 Load Test - ${{ matrix.scenario }}
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - tokens
+          - staking
+          - launch
+          - stats
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup K6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: ${{ env.K6_VERSION }}
+
+      - name: Determine API URL
+        id: api-url
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            echo "url=${{ secrets.PRODUCTION_API_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "url=${{ secrets.STAGING_API_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run K6 Load Test
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: load-tests/k6/scenarios/${{ matrix.scenario }}.js
+        env:
+          API_URL: ${{ steps.api-url.outputs.url }}
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-results-${{ matrix.scenario }}
+          path: |
+            *.json
+            *.html
+          retention-days: 30
+
+  # Artillery load test (alternative tool)
+  artillery-test:
+    name: Artillery Load Test
+    runs-on: ubuntu-latest
+    needs: smoke-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Artillery
+        run: npm install -g artillery artillery-plugin-expect
+
+      - name: Determine API URL
+        id: api-url
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            echo "url=${{ secrets.PRODUCTION_API_URL }}" >> $GITHUB_OUTPUT
+          else
+            echo "url=${{ secrets.STAGING_API_URL }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run Artillery Test
+        run: |
+          artillery run \
+            --target ${{ steps.api-url.outputs.url }} \
+            --output artillery-report.json \
+            load-tests/artillery/config.yml
+
+      - name: Generate HTML Report
+        if: always()
+        run: |
+          artillery report artillery-report.json --output artillery-report.html || true
+
+      - name: Upload Artillery Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artillery-results
+          path: |
+            artillery-report.json
+            artillery-report.html
+          retention-days: 30
+
+  # Summary job
+  summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [k6-load-test, artillery-test]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+
+      - name: Generate Summary
+        run: |
+          echo "# Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ github.event.inputs.environment || 'staging' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Results" >> $GITHUB_STEP_SUMMARY
+          echo "Check the artifacts for detailed test results." >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::warning::Load tests failed! Check the artifacts for details."
+
+  # Stress test (manual only, not scheduled)
+  stress-test:
+    name: Stress Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.scenario == 'stress'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup K6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: ${{ env.K6_VERSION }}
+
+      - name: Run Stress Test
+        run: |
+          k6 run \
+            --env API_URL=${{ secrets.STAGING_API_URL }} \
+            load-tests/k6/stress-test.js
+        continue-on-error: true
+
+      - name: Upload Stress Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stress-test-results
+          path: |
+            *.json
+            *.html
+          retention-days: 30
