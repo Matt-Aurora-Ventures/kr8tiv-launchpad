@@ -176,7 +176,7 @@ export function generateStakingPageMetadata(): Metadata {
   return {
     title: 'Stake KR8TIV',
     description:
-      'Stake KR8TIV tokens to earn rewards and unlock fee discounts up to 50%. Lock longer for higher multipliers.',
+      'Stake KR8TIV tokens to earn rewards and unlock fee discounts up to 100%. Lock longer for higher multipliers.',
     keywords: [
       'stake kr8tiv',
       'staking rewards',
@@ -188,7 +188,7 @@ export function generateStakingPageMetadata(): Metadata {
     openGraph: {
       title: `Stake KR8TIV | ${DEFAULT_METADATA.siteName}`,
       description:
-        'Stake KR8TIV tokens to earn rewards and unlock fee discounts up to 50%.',
+        'Stake KR8TIV tokens to earn rewards and unlock fee discounts up to 100%.',
       url: `${BASE_URL}/staking`,
     },
     alternates: {

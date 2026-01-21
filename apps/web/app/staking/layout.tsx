@@ -8,11 +8,11 @@ export const metadata: Metadata = generateStakingPageMetadata();
 const stakingFAQs = [
   {
     question: 'What are the staking tiers?',
-    answer: 'There are three tiers: Holder (1,000 KR8TIV, 10% discount), Premium (10,000 KR8TIV, 25% discount), and VIP (100,000 KR8TIV, 50% discount).',
+    answer: 'There are three tiers: Holder (1,000 KR8TIV, 20% discount), Premium (10,000 KR8TIV, 60% discount), and VIP (100,000 KR8TIV, 100% discount).',
   },
   {
     question: 'How do lock duration multipliers work?',
-    answer: 'Longer lock periods increase your effective stake: 1 week (1x), 1 month (1.25x), 3 months (1.5x), 6 months (2x), 1 year (3x).',
+    answer: 'Longer lock periods increase your effective stake: 1 week (1x), 1 month (1.25x), 3 months (1.5x), 6 months (1.75x), 1 year (2x).',
   },
   {
     question: 'Can I unstake early?',

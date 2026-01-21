@@ -15,8 +15,8 @@ import { TokenStatus } from "@prisma/client";
  * Core launchpad service for token management
  */
 export class LaunchpadService {
-  // Platform fee: 1% (100 basis points)
-  private static readonly PLATFORM_FEE_BPS = 100;
+  // Platform fee: 5% (500 basis points)
+  private static readonly PLATFORM_FEE_BPS = 500;
 
   /**
    * Launch a new token through Bags.fm

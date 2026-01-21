@@ -42,7 +42,7 @@ const features = [
   {
     icon: Coins,
     title: 'Stake for Discounts',
-    description: 'Stake KR8TIV tokens to unlock up to 50% fee discounts and VIP benefits.',
+    description: 'Stake KR8TIV tokens to unlock up to 100% fee discounts and VIP benefits.',
   },
 ];
 
@@ -164,9 +164,9 @@ export default function HomePage() {
 
               <div className="space-y-4">
                 {[
-                  { tier: 'Holder', stake: '1,000 KR8TIV', discount: '10%' },
-                  { tier: 'Premium', stake: '10,000 KR8TIV', discount: '25%' },
-                  { tier: 'VIP', stake: '100,000 KR8TIV', discount: '50%' },
+                  { tier: 'Holder', stake: '1,000 KR8TIV', discount: '20%' },
+                  { tier: 'Premium', stake: '10,000 KR8TIV', discount: '60%' },
+                  { tier: 'VIP', stake: '100,000 KR8TIV', discount: '100%' },
                 ].map((tier) => (
                   <div key={tier.tier} className="flex items-center gap-4 p-4 rounded-lg bg-card border border-border">
                     <div className="flex-1">
@@ -196,12 +196,12 @@ export default function HomePage() {
                 </div>
                 <div className="space-y-3">
                   {[
-                    { duration: '1 Week', multiplier: '1.0x' },
-                    { duration: '1 Month', multiplier: '1.25x' },
-                    { duration: '3 Months', multiplier: '1.5x' },
-                    { duration: '6 Months', multiplier: '2.0x' },
-                    { duration: '1 Year', multiplier: '3.0x' },
-                  ].map((item, i) => (
+                  { duration: '1 Week', multiplier: '1.0x' },
+                  { duration: '1 Month', multiplier: '1.25x' },
+                  { duration: '3 Months', multiplier: '1.5x' },
+                  { duration: '6 Months', multiplier: '1.75x' },
+                  { duration: '1 Year', multiplier: '2.0x' },
+                ].map((item, i) => (
                     <div
                       key={item.duration}
                       className="flex items-center justify-between p-3 rounded-lg bg-background/50"

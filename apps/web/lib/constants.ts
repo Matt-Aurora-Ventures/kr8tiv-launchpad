@@ -15,7 +15,7 @@ export const KR8TIV_TOKEN_DECIMALS = 9;
 
 // Fee Configuration
 export const BASE_LAUNCH_FEE_SOL = 0.1;
-export const BASE_LAUNCH_FEE_PERCENT = 2.0;
+export const BASE_LAUNCH_FEE_PERCENT = 5.0;
 
 // Staking Tiers
 export const STAKING_TIERS = {
@@ -29,23 +29,23 @@ export const STAKING_TIERS = {
   HOLDER: {
     name: 'Holder',
     minStake: 1000,
-    discount: 10,
+    discount: 20,
     color: 'blue',
-    benefits: ['10% fee discount', 'Basic analytics'],
+    benefits: ['20% fee discount', 'Basic analytics'],
   },
   PREMIUM: {
     name: 'Premium',
     minStake: 10000,
-    discount: 25,
+    discount: 60,
     color: 'purple',
-    benefits: ['25% fee discount', 'Advanced analytics', 'Priority support'],
+    benefits: ['60% fee discount', 'Advanced analytics', 'Priority support'],
   },
   VIP: {
     name: 'VIP',
     minStake: 100000,
-    discount: 50,
+    discount: 100,
     color: 'gold',
-    benefits: ['50% fee discount', 'Full analytics suite', 'Dedicated support', 'Early access'],
+    benefits: ['100% fee discount', 'Full analytics suite', 'Dedicated support', 'Early access'],
   },
 } as const;
 
@@ -54,8 +54,8 @@ export const LOCK_DURATIONS = [
   { days: 7, multiplier: 1.0, label: '1 Week' },
   { days: 30, multiplier: 1.25, label: '1 Month' },
   { days: 90, multiplier: 1.5, label: '3 Months' },
-  { days: 180, multiplier: 2.0, label: '6 Months' },
-  { days: 365, multiplier: 3.0, label: '1 Year' },
+  { days: 180, multiplier: 1.75, label: '6 Months' },
+  { days: 365, multiplier: 2.0, label: '1 Year' },
 ] as const;
 
 // Tax Configuration Defaults (all opt-in, default OFF)

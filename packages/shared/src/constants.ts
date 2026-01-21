@@ -2,10 +2,10 @@ import { StakingTier } from './types';
 
 // Staking tiers
 export const STAKING_TIERS: Record<StakingTier, { minStake: number; platformFee: number; rewardMultiplier: number }> = {
-  [StakingTier.NONE]: { minStake: 0, platformFee: 500, rewardMultiplier: 0 },
-  [StakingTier.HOLDER]: { minStake: 1000, platformFee: 400, rewardMultiplier: 10000 },
-  [StakingTier.PREMIUM]: { minStake: 10000, platformFee: 200, rewardMultiplier: 15000 },
-  [StakingTier.VIP]: { minStake: 100000, platformFee: 0, rewardMultiplier: 20000 },
+  [StakingTier.NONE]: { minStake: 0, platformFee: 500, rewardMultiplier: 10000 },
+  [StakingTier.HOLDER]: { minStake: 1000, platformFee: 400, rewardMultiplier: 11000 },
+  [StakingTier.PREMIUM]: { minStake: 10000, platformFee: 200, rewardMultiplier: 12500 },
+  [StakingTier.VIP]: { minStake: 100000, platformFee: 0, rewardMultiplier: 15000 },
 };
 
 // Lock duration options
@@ -28,7 +28,7 @@ export const TAX_LIMITS = {
 // Program IDs
 export const PROGRAM_IDS = {
   BAGS_FEE_SHARE_V1: 'FEEhPbKVKnco9EXnaY3i4R5rQVUx91wgVfu8qokixywi',
-  BAGS_FEE_SHARE_V2: 'FEE2tBhCKAt7shrod19QttSVREUYPiyMzoku1mL1sGG',
+  BAGS_FEE_SHARE_V2: 'FEE2tBhCKAt7shrod19QttSVREUYPiyMzoku1mL1gqVK',
   METEORA_AMM: 'cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG',
 };
 

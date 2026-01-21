@@ -281,11 +281,11 @@ describe('GraphQL Query Resolvers', () => {
       const mockStaker = {
         id: 'staker-1',
         wallet: 'Sta4kerWa11et123456789',
-        stakedAmount: BigInt(100000000000),
-        weightedStake: BigInt(150000000000),
+        stakedAmount: BigInt(100000000000000),
+        weightedStake: BigInt(150000000000000),
         lockEndTime: new Date('2026-06-15'),
         lockDuration: 180,
-        tier: 'GOLD',
+        tier: 'VIP',
         totalRewardsClaimed: BigInt(5000000),
         pendingRewards: BigInt(1000000),
         lastClaimTime: new Date('2026-01-10'),
@@ -321,8 +321,8 @@ describe('GraphQL Query Resolvers', () => {
       expect(response.body.kind).toBe('single');
       if (response.body.kind === 'single') {
         expect(response.body.singleResult.errors).toBeUndefined();
-        expect(response.body.singleResult.data?.staker.tier).toBe('GOLD');
-        expect(response.body.singleResult.data?.staker.feeDiscount).toBe(50); // GOLD tier = 50% discount
+        expect(response.body.singleResult.data?.staker.tier).toBe('VIP');
+        expect(response.body.singleResult.data?.staker.feeDiscount).toBe(100); // VIP tier = 100% discount
       }
     });
   });

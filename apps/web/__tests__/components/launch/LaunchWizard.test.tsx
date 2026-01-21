@@ -320,7 +320,7 @@ describe('LaunchWizard', () => {
       // Mock staking discount
       vi.mock('@/hooks/useDiscount', () => ({
         useDiscount: () => ({
-          discount: { tier: 'HOLDER', discount: 10, effectiveFee: 1.8 },
+          discount: { tier: 'HOLDER', discount: 20, effectiveFee: 4.0 },
         }),
       }));
 
@@ -328,7 +328,7 @@ describe('LaunchWizard', () => {
 
       await fillAllSteps();
 
-      expect(screen.getByText(/-10%/)).toBeInTheDocument();
+      expect(screen.getByText(/-20%/)).toBeInTheDocument();
     });
 
     it('allows editing previous steps', async () => {
@@ -552,7 +552,7 @@ describe('LaunchWizard', () => {
 
       const costEstimate = screen.getByTestId('cost-estimation');
       expect(costEstimate).toHaveTextContent(/platform fee/i);
-      expect(costEstimate).toHaveTextContent(/2%/i);
+      expect(costEstimate).toHaveTextContent(/5%/i);
     });
 
     it('shows total estimated cost', async () => {
@@ -565,14 +565,14 @@ describe('LaunchWizard', () => {
     it('applies staking discount to cost', async () => {
       vi.mock('@/hooks/useDiscount', () => ({
         useDiscount: () => ({
-          discount: { tier: 'VIP', discount: 50, effectiveFee: 1.0 },
+          discount: { tier: 'VIP', discount: 100, effectiveFee: 0.0 },
         }),
       }));
 
       render(<LaunchWizard />);
 
       const costEstimate = screen.getByTestId('cost-estimation');
-      expect(costEstimate).toHaveTextContent(/1%/i); // 50% discount from 2%
+      expect(costEstimate).toHaveTextContent(/0%/i); // 100% discount from 5%
       expect(costEstimate).toHaveTextContent(/VIP/i);
     });
   });

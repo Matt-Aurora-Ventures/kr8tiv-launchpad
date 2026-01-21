@@ -8,7 +8,7 @@ export const metadata: Metadata = generateLaunchPageMetadata();
 const launchFAQs = [
   {
     question: 'How much does it cost to launch a token on KR8TIV Launchpad?',
-    answer: 'The base fee is 0.5 SOL to launch a token. KR8TIV stakers receive discounts up to 50% based on their staking tier.',
+    answer: 'The base fee is 0.1 SOL to launch a token. KR8TIV stakers receive discounts up to 100% based on their staking tier.',
   },
   {
     question: 'What tokenomics can I customize?',

@@ -110,7 +110,7 @@ export interface TokenStatsResponse {
 export const StakeRequestSchema = z.object({
   wallet: z.string().min(32).max(44),
   amount: z.string(), // BigInt as string
-  lockDurationDays: z.number().min(0).max(365).default(0),
+  lockDurationDays: z.number().min(7).max(365).default(7),
 });
 
 export type StakeRequest = z.infer<typeof StakeRequestSchema>;
@@ -282,22 +282,20 @@ export interface ApiError {
   details?: Record<string, unknown>;
 }
 
-// Staking tier thresholds (in base units, 6 decimals)
+// Staking tier thresholds (in base units, 9 decimals)
 export const STAKING_TIERS = {
   NONE: { minStake: BigInt(0), discount: 0 },
-  BRONZE: { minStake: BigInt(10_000_000_000), discount: 10 }, // 10,000 KR8TIV
-  SILVER: { minStake: BigInt(50_000_000_000), discount: 25 }, // 50,000 KR8TIV
-  GOLD: { minStake: BigInt(100_000_000_000), discount: 50 }, // 100,000 KR8TIV
-  DIAMOND: { minStake: BigInt(500_000_000_000), discount: 75 }, // 500,000 KR8TIV
+  HOLDER: { minStake: BigInt(1_000_000_000_000), discount: 20 }, // 1,000 KR8TIV
+  PREMIUM: { minStake: BigInt(10_000_000_000_000), discount: 60 }, // 10,000 KR8TIV
+  VIP: { minStake: BigInt(100_000_000_000_000), discount: 100 }, // 100,000 KR8TIV
 } as const;
 
 export type StakingTierName = keyof typeof STAKING_TIERS;
 
 export function getTierFromStake(amount: bigint): StakingTierName {
-  if (amount >= STAKING_TIERS.DIAMOND.minStake) return "DIAMOND";
-  if (amount >= STAKING_TIERS.GOLD.minStake) return "GOLD";
-  if (amount >= STAKING_TIERS.SILVER.minStake) return "SILVER";
-  if (amount >= STAKING_TIERS.BRONZE.minStake) return "BRONZE";
+  if (amount >= STAKING_TIERS.VIP.minStake) return "VIP";
+  if (amount >= STAKING_TIERS.PREMIUM.minStake) return "PREMIUM";
+  if (amount >= STAKING_TIERS.HOLDER.minStake) return "HOLDER";
   return "NONE";
 }
 
@@ -307,11 +305,11 @@ export function getDiscountFromTier(tier: StakingTierName): number {
 
 // Lock duration multipliers for weighted staking
 export const LOCK_MULTIPLIERS: Record<number, number> = {
-  0: 1.0, // No lock
+  7: 1.0, // 1 week
   30: 1.25, // 1 month
   90: 1.5, // 3 months
-  180: 2.0, // 6 months
-  365: 3.0, // 1 year
+  180: 1.75, // 6 months
+  365: 2.0, // 1 year
 };
 
 export function getLockMultiplier(days: number): number {

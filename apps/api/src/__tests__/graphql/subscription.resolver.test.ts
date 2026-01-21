@@ -106,9 +106,9 @@ describe('GraphQL Subscription Resolvers', () => {
       const stakeEvent = {
         type: 'STAKE',
         wallet: 'StakerWallet123456789',
-        amount: '100000000000',
-        newTotalStaked: '100000000000',
-        tier: 'GOLD',
+        amount: '100000000000000',
+        newTotalStaked: '100000000000000',
+        tier: 'VIP',
         signature: 'TxSignature123456789',
         timestamp: new Date().toISOString(),
       };
@@ -123,7 +123,7 @@ describe('GraphQL Subscription Resolvers', () => {
           stakeEvent: expect.objectContaining({
             type: 'STAKE',
             wallet: 'StakerWallet123456789',
-            tier: 'GOLD',
+            tier: 'VIP',
           }),
         })
       );
@@ -135,7 +135,7 @@ describe('GraphQL Subscription Resolvers', () => {
         wallet: 'StakerWallet123456789',
         amount: '50000000000',
         newTotalStaked: '50000000000',
-        tier: 'SILVER',
+        tier: 'PREMIUM',
         signature: 'UnstakeTxSig123456789',
         timestamp: new Date().toISOString(),
       };
@@ -160,8 +160,8 @@ describe('GraphQL Subscription Resolvers', () => {
         type: 'CLAIM',
         wallet: 'StakerWallet123456789',
         amount: '5000000000',
-        newTotalStaked: '100000000000',
-        tier: 'GOLD',
+        newTotalStaked: '100000000000000',
+        tier: 'VIP',
         signature: 'ClaimTxSig123456789',
         timestamp: new Date().toISOString(),
       };

@@ -41,7 +41,7 @@ model Token {
   customAllocations   Json?
 
   // Platform fee tracking
-  platformFeeApplied  Int      @default(100) // basis points (1% default)
+  platformFeeApplied  Int      @default(500) // basis points (5% default)
   platformFeeDiscount Int      @default(0)   // discount from staking
 
   // Stats
@@ -174,11 +174,10 @@ model Staker {
 }
 
 enum StakingTier {
-  NONE        // < 10,000 KR8TIV
-  BRONZE      // 10,000+ KR8TIV (10% discount)
-  SILVER      // 50,000+ KR8TIV (25% discount)
-  GOLD        // 100,000+ KR8TIV (50% discount)
-  DIAMOND     // 500,000+ KR8TIV (75% discount)
+  NONE        // < 1,000 KR8TIV
+  HOLDER      // 1,000+ KR8TIV (4% platform fee)
+  PREMIUM     // 10,000+ KR8TIV (2% platform fee)
+  VIP         // 100,000+ KR8TIV (0% platform fee)
 }
 
 // Creator profile and staking benefits

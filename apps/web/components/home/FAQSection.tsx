@@ -34,12 +34,12 @@ const faqs: FAQ[] = [
   {
     category: 'Staking',
     question: 'What are the benefits of staking KR8TIV tokens?',
-    answer: 'Staking KR8TIV tokens provides multiple benefits: fee discounts on trades and launches (up to 50%), higher staking rewards multipliers, early access to new features, and governance voting rights. The longer you stake, the higher your tier and rewards.',
+    answer: 'Staking KR8TIV tokens provides multiple benefits: fee discounts on trades and launches (up to 100%), higher staking rewards multipliers, early access to new features, and governance voting rights. The longer you stake, the higher your tier and rewards.',
   },
   {
     category: 'Staking',
     question: 'What are the staking tiers?',
-    answer: 'There are 4 staking tiers: Bronze (1K+ KR8TIV, 10% fee discount), Silver (10K+ KR8TIV, 25% discount), Gold (50K+ KR8TIV, 35% discount), and Diamond (100K+ KR8TIV, 50% discount). Locking tokens for longer periods provides additional multipliers.',
+    answer: 'There are 3 staking tiers: Holder (1K+ KR8TIV, 20% fee discount), Premium (10K+ KR8TIV, 60% discount), and VIP (100K+ KR8TIV, 100% discount). Locking tokens for longer periods provides additional multipliers.',
   },
   {
     category: 'Fees',

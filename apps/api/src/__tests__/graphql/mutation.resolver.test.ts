@@ -166,8 +166,8 @@ describe('GraphQL Mutation Resolvers', () => {
       const mockStakeResult = {
         success: true,
         signature: 'TxSignature123456789',
-        newStakedAmount: '100000000000',
-        newTier: 'GOLD',
+        newStakedAmount: '100000000000000',
+        newTier: 'VIP',
       };
 
       (StakingService.stake as ReturnType<typeof vi.fn>).mockResolvedValue(mockStakeResult);
@@ -190,7 +190,7 @@ describe('GraphQL Mutation Resolvers', () => {
         variables: {
           input: {
             wallet: 'Sta4kerWa11et123456789',
-            amount: '100000000000',
+            amount: '100000000000000',
             lockDurationDays: 180,
           },
         },
@@ -218,8 +218,8 @@ describe('GraphQL Mutation Resolvers', () => {
       const mockUnstakeResult = {
         success: true,
         signature: 'UnstakeTxSig123456789',
-        newStakedAmount: '50000000000',
-        newTier: 'SILVER',
+        newStakedAmount: '10000000000000',
+        newTier: 'PREMIUM',
       };
 
       (StakingService.unstake as ReturnType<typeof vi.fn>).mockResolvedValue(mockUnstakeResult);
