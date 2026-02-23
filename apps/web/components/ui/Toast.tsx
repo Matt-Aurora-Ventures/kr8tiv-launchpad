@@ -21,6 +21,7 @@ interface Toast {
 interface ToastContextType {
   toasts: Toast[];
   addToast: (toast: Omit<Toast, 'id'>) => string;
+  toast: (toast: Omit<Toast, 'id'> & { message?: string }) => string;
   removeToast: (id: string) => void;
   updateToast: (id: string, updates: Partial<Toast>) => void;
 }
@@ -57,6 +58,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     return id;
   }, []);
 
+  const toast = useCallback((input: Omit<Toast, 'id'> & { message?: string }) => {
+    const { message, description, ...rest } = input;
+    return addToast({
+      ...rest,
+      description: description ?? message,
+    });
+  }, [addToast]);
+
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
@@ -76,7 +85,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast, updateToast }}>
+    <ToastContext.Provider value={{ toasts, addToast, toast, removeToast, updateToast }}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>

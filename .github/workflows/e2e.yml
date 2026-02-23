@@ -65,9 +65,9 @@ jobs:
           NODE_ENV: test
           PORT: 3001
         run: |
-          npm run build
-          npm start &
-          sleep 10
+          npm run dev > /tmp/api-dev.log 2>&1 &
+          sleep 20
+          curl -fsS "http://localhost:3001/health" > /dev/null || (cat /tmp/api-dev.log && exit 1)
 
       - name: Start web server
         working-directory: apps/web
@@ -75,9 +75,9 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_SOLANA_NETWORK: devnet
         run: |
-          npm run build
-          npm start &
-          sleep 10
+          npm run dev > /tmp/web-dev.log 2>&1 &
+          sleep 20
+          curl -fsS "http://localhost:3000" > /dev/null || (cat /tmp/web-dev.log && exit 1)
 
       - name: Run E2E tests
         working-directory: apps/web

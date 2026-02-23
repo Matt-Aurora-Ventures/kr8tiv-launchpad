@@ -15,6 +15,7 @@ import { PWAProvider } from '@/providers/PWAProvider';
 import { AnalyticsProvider, GoogleAnalytics, Mixpanel } from '@/components/analytics';
 import { SkipLink } from '@/components/a11y';
 import { AnnounceProvider } from '@/hooks/useAnnounce';
+import { ToastProvider } from '@/components/ui';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-geist-sans' });
 
@@ -30,10 +31,6 @@ export const metadata: Metadata = {
   },
   formatDetection: {
     telephone: false,
-  },
-  other: {
-    ...baseMetadata.other,
-    'mobile-web-app-capable': 'yes',
   },
 };
 
@@ -95,11 +92,13 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="system">
           <WalletProvider>
             <AnalyticsProvider>
-              <PWAProvider>
-                <Header />
-                <main className="flex-1">{children}</main>
-                <Footer />
-              </PWAProvider>
+              <ToastProvider>
+                <PWAProvider>
+                  <Header />
+                  <main className="flex-1">{children}</main>
+                  <Footer />
+                </PWAProvider>
+              </ToastProvider>
             </AnalyticsProvider>
           </WalletProvider>
         </ThemeProvider>
