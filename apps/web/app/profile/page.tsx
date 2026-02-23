@@ -313,7 +313,7 @@ export default function ProfilePage() {
         {activeTab === 'watchlist' && <Watchlist />}
 
         {activeTab === 'history' && (
-          <TransactionHistory tokenMint={publicKey?.toString()} />
+          <TransactionHistory />
         )}
 
         {activeTab === 'achievements' && (
