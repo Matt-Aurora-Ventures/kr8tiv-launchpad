@@ -64,6 +64,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
           PORT: 3001
+          SOLANA_RPC_URL: https://api.devnet.solana.com
         run: |
           TS_NODE_TRANSPILE_ONLY=1 npm run dev > /tmp/api-dev.log 2>&1 &
           sleep 20
