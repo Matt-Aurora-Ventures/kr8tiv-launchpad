@@ -65,7 +65,7 @@ jobs:
           NODE_ENV: test
           PORT: 3001
         run: |
-          npm run dev > /tmp/api-dev.log 2>&1 &
+          TS_NODE_TRANSPILE_ONLY=1 npm run dev > /tmp/api-dev.log 2>&1 &
           sleep 20
           curl -fsS "http://localhost:3001/health" > /dev/null || (cat /tmp/api-dev.log && exit 1)
 
@@ -121,9 +121,17 @@ jobs:
         working-directory: apps/web
         run: npm run build
 
+      - name: Start web server for Lighthouse
+        run: |
+          npm run dev --workspace=apps/web > /tmp/lh-web.log 2>&1 &
+          sleep 20
+          curl -fsS "http://localhost:3000" > /dev/null || (cat /tmp/lh-web.log && exit 1)
+
       - name: Run Lighthouse
         uses: treosh/lighthouse-ci-action@v10
         with:
           configPath: '.lighthouserc.json'
+          urls: |
+            http://localhost:3000
           uploadArtifacts: true
           temporaryPublicStorage: true
