@@ -17,12 +17,11 @@ import { Rate, Trend, Counter } from 'k6/metrics';
 import { options as defaultOptions, config, randomItem, defaultHeaders } from '../config.js';
 
 // Export options for K6
-export const options = {
-  ...defaultOptions,
+export const options = Object.assign({}, defaultOptions, {
   tags: {
     scenario: 'tokens',
   },
-};
+});
 
 // Custom metrics
 const tokenListSuccess = new Rate('token_list_success');
