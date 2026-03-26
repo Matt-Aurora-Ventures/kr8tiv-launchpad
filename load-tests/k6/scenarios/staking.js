@@ -19,12 +19,11 @@ import { Rate, Trend } from 'k6/metrics';
 import { options as defaultOptions, config, randomItem, randomWallet, defaultHeaders } from '../config.js';
 
 // Export options for K6
-export const options = {
-  ...defaultOptions,
+export const options = Object.assign({}, defaultOptions, {
   tags: {
     scenario: 'staking',
   },
-};
+});
 
 // Custom metrics
 const poolInfoSuccess = new Rate('pool_info_success');

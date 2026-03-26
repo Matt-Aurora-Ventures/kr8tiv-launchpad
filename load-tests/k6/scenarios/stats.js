@@ -17,12 +17,11 @@ import { Rate, Trend } from 'k6/metrics';
 import { options as defaultOptions, config, randomItem, randomWallet, defaultHeaders } from '../config.js';
 
 // Export options for K6
-export const options = {
-  ...defaultOptions,
+export const options = Object.assign({}, defaultOptions, {
   tags: {
     scenario: 'stats',
   },
-};
+});
 
 // Custom metrics
 const platformStatsSuccess = new Rate('platform_stats_success');

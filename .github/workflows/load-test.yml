@@ -32,10 +32,37 @@ env:
   K6_VERSION: '0.47.0'
 
 jobs:
+  # Pre-flight check — ensure we have a target URL
+  preflight:
+    name: Preflight Check
+    runs-on: ubuntu-latest
+    outputs:
+      api_url: ${{ steps.resolve.outputs.url }}
+      has_url: ${{ steps.resolve.outputs.has_url }}
+    steps:
+      - name: Resolve API URL
+        id: resolve
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+            URL="${{ secrets.PRODUCTION_API_URL }}"
+          else
+            URL="${{ secrets.STAGING_API_URL }}"
+          fi
+          if [[ -z "$URL" ]]; then
+            echo "has_url=false" >> $GITHUB_OUTPUT
+            echo "url=" >> $GITHUB_OUTPUT
+            echo "::warning::No API URL configured. Set STAGING_API_URL or PRODUCTION_API_URL in repo secrets."
+          else
+            echo "has_url=true" >> $GITHUB_OUTPUT
+            echo "url=$URL" >> $GITHUB_OUTPUT
+          fi
+
   # Smoke test - quick sanity check
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.has_url == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,7 +75,7 @@ jobs:
       - name: Run smoke test
         run: |
           k6 run \
-            --env API_URL=${{ secrets.STAGING_API_URL || 'http://localhost:3001' }} \
+            --env API_URL=${{ needs.preflight.outputs.api_url }} \
             --vus 5 \
             --duration 30s \
             load-tests/k6/scenarios/tokens.js
@@ -58,7 +85,8 @@ jobs:
   k6-load-test:
     name: K6 Load Test - ${{ matrix.scenario }}
     runs-on: ubuntu-latest
-    needs: smoke-test
+    needs: [preflight, smoke-test]
+    if: needs.preflight.outputs.has_url == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -76,21 +104,12 @@ jobs:
         with:
           k6-version: ${{ env.K6_VERSION }}
 
-      - name: Determine API URL
-        id: api-url
-        run: |
-          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-            echo "url=${{ secrets.PRODUCTION_API_URL }}" >> $GITHUB_OUTPUT
-          else
-            echo "url=${{ secrets.STAGING_API_URL }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Run K6 Load Test
         uses: grafana/k6-action@v0.3.1
         with:
           filename: load-tests/k6/scenarios/${{ matrix.scenario }}.js
         env:
-          API_URL: ${{ steps.api-url.outputs.url }}
+          API_URL: ${{ needs.preflight.outputs.api_url }}
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -106,7 +125,8 @@ jobs:
   artillery-test:
     name: Artillery Load Test
     runs-on: ubuntu-latest
-    needs: smoke-test
+    needs: [preflight, smoke-test]
+    if: needs.preflight.outputs.has_url == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,19 +140,10 @@ jobs:
       - name: Install Artillery
         run: npm install -g artillery artillery-plugin-expect
 
-      - name: Determine API URL
-        id: api-url
-        run: |
-          if [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-            echo "url=${{ secrets.PRODUCTION_API_URL }}" >> $GITHUB_OUTPUT
-          else
-            echo "url=${{ secrets.STAGING_API_URL }}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Run Artillery Test
         run: |
           artillery run \
-            --target ${{ steps.api-url.outputs.url }} \
+            --target ${{ needs.preflight.outputs.api_url }} \
             --output artillery-report.json \
             load-tests/artillery/config.yml
 
@@ -155,30 +166,34 @@ jobs:
   summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [k6-load-test, artillery-test]
+    needs: [preflight, k6-load-test, artillery-test]
     if: always()
     steps:
+      - name: Skip notice
+        if: needs.preflight.outputs.has_url != 'true'
+        run: |
+          echo "# Load Tests Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "No API URL configured. Set **STAGING_API_URL** or **PRODUCTION_API_URL** in repo secrets to enable load tests." >> $GITHUB_STEP_SUMMARY
+
       - name: Download all artifacts
+        if: needs.preflight.outputs.has_url == 'true'
         uses: actions/download-artifact@v4
         with:
           path: results
 
       - name: Generate Summary
+        if: needs.preflight.outputs.has_url == 'true'
         run: |
           echo "# Load Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Test Configuration" >> $GITHUB_STEP_SUMMARY
           echo "- **Environment:** ${{ github.event.inputs.environment || 'staging' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Run Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Date:** $(date -u +\"%Y-%m-%d %H:%M:%S UTC\")" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Results" >> $GITHUB_STEP_SUMMARY
           echo "Check the artifacts for detailed test results." >> $GITHUB_STEP_SUMMARY
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "::warning::Load tests failed! Check the artifacts for details."
 
   # Stress test (manual only, not scheduled)
   stress-test:
